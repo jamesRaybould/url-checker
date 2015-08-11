@@ -10,7 +10,8 @@ Where `urls.csv` is a list of valid URLs with a line break after each URL
 - Make sure that you have `golang` installed (using `brew install go` would be my recommended way on OSX)
 - Change into the directory on the command line
 - run `export GOPATH=$PWD && export GOBIN=$PWD/bin`
-- `go run src/github.com/jamesRaybould/url-checker/urlChecker.go`
+- `go get url-checker`
+- `go run src/url-checker/urlChecker.go`
 
 ##Building
 As above but run `go build src/github.com/jamesRaybould/url-checker/urlChecker.go`

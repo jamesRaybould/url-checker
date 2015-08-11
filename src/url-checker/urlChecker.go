@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/csv"
 	"flag"
+	"github.com/fatih/color"
 	"log"
 	"net/http"
 	"os"
@@ -71,8 +72,13 @@ func hitUrl(url string, wg *sync.WaitGroup) {
 
 	resp, err := http.Get(url)
 	if err != nil {
-		log.Println(err)
+		color.Red("%s\n", err)
+		return
 	}
 
-	log.Printf("Url : %s Status: %s\n", url, resp.Status)
+	if resp.StatusCode != http.StatusOK {
+		color.Red("Url : %s Status: %s\n", url, resp.Status)
+	} else {
+		color.Green("Url : %s Status: %s\n", url, resp.Status)
+	}
 }
