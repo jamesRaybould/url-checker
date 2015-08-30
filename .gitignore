@@ -36,6 +36,4 @@ _testmain.go
 
 #ignore the github imports
 github.com
-
-bin/urlChecker
-urlChecker
+gopkg.in
