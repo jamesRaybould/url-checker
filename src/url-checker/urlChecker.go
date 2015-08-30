@@ -1,83 +1,108 @@
 package main
 
 import (
-	"encoding/csv"
 	"flag"
+	"fmt"
 	"github.com/fatih/color"
 	"log"
 	"net/http"
-	"os"
+	"runtime"
 	"sync"
 	"time"
+	"url-checker/strategy"
 )
 
 var csvPath string
+var useAPI bool
+
+//Create a wait group so we can fire off all the goroutines and wait for them to complete
+var consumer_wg sync.WaitGroup
 
 func init() {
 	flag.StringVar(&csvPath, "csvPath", "urls.csv", "The path of the csv to parse")
+	flag.BoolVar(&useAPI, "api", false, "Use the help-cms api")
 }
 
 func main() {
 	flag.Parse()
+	log.Println("Starting...")
+	startTime := time.Now()
 
-	urlsToHit, err := readUrls(csvPath)
+	var urlStrategy strategy.UrlStrategy
+	if useAPI {
+		log.Println("Using the API to retrieve urls...")
+		urlStrategy = strategy.UrlStrategy(&strategy.ApiUrls{})
+	} else {
+		log.Println("Using a csv to retrieve the urls...")
+		urlStrategy = strategy.UrlStrategy(&strategy.CsvUrls{Path: csvPath})
+	}
+
+	urlsToHit, err := urlStrategy.Get()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	//Create a wait group so we can fire off all the goroutines and wait for them to complete
-	var wg sync.WaitGroup
-
-	for key, val := range urlsToHit {
-		//Fire off as many go routines as we have URLs
-		//pewpewpewpewpewpew
-		wg.Add(1)
-		//index[0] will always contain the one and only element of a valid URL csv
-		go hitUrl(val[0], &wg)
-
-		//Some *super* naive throttling
-		//every 10 urls pause for a second before adding another 10 urls
-		if key > 0 && key%10 == 0 {
-			time.Sleep(1 * time.Second)
-		}
+	//Main channel to produce what will essentially be the queue of urls to hit
+	var urls = make(chan string, len(urlsToHit))
+	//Unroll the []string into the queue channel
+	for _, val := range urlsToHit {
+		urls <- val
 	}
 
-	//Sit here until all the goroutines are completed, then exit nicely
-	wg.Wait()
+	log.Println("Reaching out and touching the urls")
+	var numConsumers int
+	if runtime.NumCPU()*2 > len(urlsToHit) {
+		numConsumers = len(urlsToHit)
+	} else {
+		numConsumers = runtime.NumCPU() * 2
+	}
+
+	var failedUrl = make(chan string, len(urlsToHit))
+
+	for c := 0; c < numConsumers; c++ {
+		consumer_wg.Add(1)
+		go consumer(urls, failedUrl)
+	}
+
+	//Sit here until all the goroutines are completed, then continue to show the failures
+	consumer_wg.Wait()
+	close(urls)
+
+	timeTaken := time.Since(startTime)
+	log.Println("Finished and took:", timeTaken)
+	//Don't need this channel any more so close it
+	close(failedUrl)
+
+	for response := range failedUrl {
+		color.Red("%s\n", response)
+	}
+
+	log.Printf("There where %d urls crawled", len(urlsToHit))
 }
 
-//Creates an array of the urls that are present in the CSV
-func readUrls(path string) ([][]string, error) {
-	csvfile, err := os.Open(path)
-	if err != nil {
-		return [][]string{}, err
+func consumer(urls chan string, failedUrls chan string) {
+	for url := range urls {
+		hitUrl(url, failedUrls)
+		//Check to see if we have drained the channel,
+		//if so then signal that this consumer is done
+		if len(urls) == 0 {
+			consumer_wg.Done()
+			return
+		}
 	}
-	defer csvfile.Close()
-
-	reader := csv.NewReader(csvfile)
-	reader.FieldsPerRecord = 1
-
-	CSVdata, err := reader.ReadAll()
-	if err != nil {
-		return [][]string{}, err
-	}
-
-	return CSVdata, nil
 }
 
 //Hit the chosen URL using a GET request and signal its completion using the waitGroup
 //Prints out the URL and the Status code to the command line
-func hitUrl(url string, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func hitUrl(url string, failedUrl chan string) {
 	resp, err := http.Get(url)
 	if err != nil {
-		color.Red("%s\n", err)
+		failedUrl <- err.Error()
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		color.Red("Url : %s Status: %s\n", url, resp.Status)
+		failedUrl <- fmt.Sprintf("Url : %s Status: %s\n", url, resp.Status)
 	} else {
 		color.Green("Url : %s Status: %s\n", url, resp.Status)
 	}
