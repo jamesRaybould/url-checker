@@ -36,7 +36,7 @@ func (s *ApiUrls) Get() ([]string, error) {
 
 	var urls []string
 	for _, value := range urlList.Urls {
-		if value.Visible {
+		if value.Visible && value.ProductType[0].Type != model.Settings.ProductType {
 			urls = append(urls, s.BaseUrl+value.Url)
 		}
 	}

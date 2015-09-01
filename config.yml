@@ -1,2 +1,3 @@
 api_url: your_api_url
 base_url: http://your.base.url/
+product_type: productType

@@ -9,8 +9,9 @@ import (
 )
 
 type Config struct {
-	ApiUrl  string `yaml:"api_url"`
-	BaseUrl string `yaml:"base_url"`
+	ApiUrl      string `yaml:"api_url"`
+	BaseUrl     string `yaml:"base_url"`
+	ProductType string `yaml:"product_type"`
 }
 
 var Settings Config

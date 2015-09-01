@@ -48,6 +48,8 @@ func main() {
 	for _, val := range urlsToHit {
 		urls <- val
 	}
+	close(urls)
+	urlParsingTimeTaken := time.Since(startTime)
 
 	log.Println("Reaching out and touching the urls")
 	var numConsumers int
@@ -66,18 +68,21 @@ func main() {
 
 	//Sit here until all the goroutines are completed, then continue to show the failures
 	consumer_wg.Wait()
-	close(urls)
 
 	timeTaken := time.Since(startTime)
 	log.Println("Finished and took:", timeTaken)
 	//Don't need this channel any more so close it
 	close(failedUrl)
-
+	noFailedUrls := len(failedUrl)
 	for response := range failedUrl {
 		color.Red("%s\n", response)
 	}
 
-	log.Printf("There where %d urls crawled", len(urlsToHit))
+	log.Printf("There where %d urls crawled in %s with %d failures. The api took %s to return and parse",
+		len(urlsToHit),
+		timeTaken,
+		noFailedUrls,
+		urlParsingTimeTaken)
 }
 
 func consumer(urls chan string, failedUrls chan string) {
