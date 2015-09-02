@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 	"url-checker/strategy"
@@ -100,15 +101,28 @@ func consumer(urls chan string, failedUrls chan string) {
 //Hit the chosen URL using a GET request and signal its completion using the waitGroup
 //Prints out the URL and the Status code to the command line
 func hitUrl(url string, failedUrl chan string) {
-	resp, err := http.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	//Add me some akamai debug headers
+	req.Header.Add("Pragma", "akamai-x-cache-on, akamai-x-check-cacheable")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		failedUrl <- err.Error()
 		return
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		failedUrl <- fmt.Sprintf("Url : %s Status: %s\n", url, resp.Status)
+	//trim out everthing that isn't the cache hit type
+	fromIndex := strings.Index(resp.Header.Get("X-Cache"), " from")
+	cacheHit := "No Cache header"
+	if fromIndex > 0 {
+		cacheHit = resp.Header.Get("X-Cache")[:fromIndex]
+	}
+
+	responseString := fmt.Sprintf("Is cacheable? %s  \t Cache hit: %s   \t Url : %s Status: %s \n", resp.Header.Get("X-Check-Cacheable"), cacheHit, url, resp.Status)
+	if resp.StatusCode == http.StatusOK {
+		color.Green(responseString)
 	} else {
-		color.Green("Url : %s Status: %s\n", url, resp.Status)
+		failedUrl <- responseString
 	}
 }
